@@ -1,4 +1,6 @@
-# laravel-idempotency — спецификация v0.1
+# laravel-idempotency — design v0.1
+
+> Исходная спецификация, по которой написан v0.1, с решениями по развилкам. Актуальное поведение и конфигурация — в [README](../README.md).
 
 `composer require azhimov/laravel-idempotency`
 
@@ -32,6 +34,12 @@ Fingerprint, lock, DB-хранилище и события — **не** отли
 - **Stream- и file-ответы** не сохраняются, lock снимается.
 - **CI:** PHP 8.2–8.5 × Laravel 11–13 + prefer-lowest; PHP 8.2 × Laravel 13 исключён.
 
+## Решения на ревью v0.1.0
+- `store_status_codes` по умолчанию `[[200, 499]]`: 3xx сохраняются, повтор POST → 303 отдаёт тот же 303.
+- Env: `IDEMPOTENCY_STORE`, `IDEMPOTENCY_TTL`, `IDEMPOTENCY_REQUIRED` (строгий парсинг, мусор → ошибка конфига).
+- Ограничение v0.1 зафиксировано в README: окно «бизнес-изменение выполнено, `complete()` не успел». Для `DatabaseStore` рекомендуется отдельное подключение.
+- v0.2: opt-in `DatabaseStore::completeInTransaction()` — ответ коммитится в той же транзакции, что и бизнес-изменение.
+
 ## Поведение
 1. Middleware `idempotent` (алиас) / `Azhimov\Idempotency\Http\Middleware\EnsureIdempotency`.
    Параметры: `idempotent:required`, `idempotent:ttl=3600`.
@@ -41,7 +49,7 @@ Fingerprint, lock, DB-хранилище и события — **не** отли
    - нет ключа и режим optional → обычное выполнение без идемпотентности
 4. **Scope ключа:** ключ + пользователь (auth id или `guest:{ip}`) + метод + шаблон маршрута. Один и тот же ключ у разных пользователей не конфликтует. Резолвер scope настраивается (например, по API-клиенту/тенанту).
 5. **Fingerprint запроса:** hash(method + path + нормализованное тело). Тот же ключ с другим телом → **422** (`idempotency_key_reused`).
-6. **Конкурентность:** хранилище атомарно захватывает ключ в `begin()` (cache: atomic add; database: уникальная вставка).
+6. **Конкурентность:** хранилище атомарно захватывает ключ в `begin()` (cache: все переходы под коротким per-key mutex на `Cache::lock`; database: `insertOrIgnore` по первичному ключу + условные `UPDATE`/`DELETE`).
    Второй запрос с тем же ключом, пока первый выполняется → **409** (`idempotency_request_in_progress`) + заголовок `Retry-After`.
 7. **Сохранение ответа:** статус, тело, заголовки из белого списка (`Content-Type`, `Location`), TTL (по умолчанию 24 ч).
    - 2xx, 3xx и 4xx — сохраняются (настраивается)

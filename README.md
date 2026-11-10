@@ -332,6 +332,9 @@ sequenceDiagram
 
 ## Why it's built this way
 
+The original design notes and the decisions behind them are in [docs/DESIGN.md](docs/DESIGN.md).
+
+
 - **The store owns the lock.** No separate `Cache::lock` held around your controller: claiming the key *is* the lock. This lets the database store work without Redis at all.
 - **Owner tokens (fencing).** Every claim gets a fresh token; `complete()` is compare-and-set on it. A request whose lock expired can't overwrite the result of the request that took over — and you get `IdempotencyLockLost` instead of silent corruption.
 - **Durable keys in the database store.** Records are rows, so a cache eviction or a Redis restart can't erase a key and let a retry through. That closes one source of duplicates, not all of them (see [Limitations](#limitations)). The claim is a primary-key `insertOrIgnore` (no exception, so it never aborts a surrounding PostgreSQL transaction); takeover, complete and release are single conditional `UPDATE`/`DELETE` statements.
