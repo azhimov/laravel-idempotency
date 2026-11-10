@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Azhimov\Idempotency;
 
+use Azhimov\Idempotency\Contracts\IdempotencyStore;
 use Azhimov\Idempotency\Contracts\ScopeResolver;
+use Azhimov\Idempotency\Http\Middleware\EnsureIdempotency;
+use Azhimov\Idempotency\Stores\CacheStore;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 
@@ -18,15 +22,33 @@ final class IdempotencyServiceProvider extends ServiceProvider
         $this->app->bind(ScopeResolver::class, fn (Application $app): ScopeResolver => self::makeConfigured(
             $app, 'idempotency.scope_resolver', ScopeResolver::class,
         ));
+
+        $this->app->bind(IdempotencyStore::class, fn (Application $app): IdempotencyStore => self::makeStore($app));
     }
 
     public function boot(): void
     {
+        $this->app->make(Router::class)->aliasMiddleware('idempotent', EnsureIdempotency::class);
+
         if ($this->app->runningInConsole()) {
             $this->publishes([
                 self::configPath() => config_path('idempotency.php'),
             ], 'idempotency-config');
         }
+    }
+
+    private static function makeStore(Application $app): IdempotencyStore
+    {
+        $config = $app->make('config');
+        $store = $config->get('idempotency.store');
+
+        if ($store === 'cache') {
+            $cacheStore = $config->get('idempotency.cache_store');
+
+            return new CacheStore($app->make('cache')->store(is_string($cacheStore) ? $cacheStore : null));
+        }
+
+        return self::makeConfigured($app, 'idempotency.store', IdempotencyStore::class);
     }
 
     /**

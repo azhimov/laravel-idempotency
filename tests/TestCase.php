@@ -17,4 +17,9 @@ abstract class TestCase extends Orchestra
     {
         return [IdempotencyServiceProvider::class];
     }
+
+    protected function defineEnvironment($app): void
+    {
+        $app['config']->set('cache.default', 'array');
+    }
 }
