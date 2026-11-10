@@ -26,7 +26,7 @@ Fingerprint, lock, DB-хранилище и события — **не** отли
 ## Решения v0.1
 - **Lock держит хранилище.** `begin(scope, key, fingerprint): Started | InProgress | Completed | Mismatch`; `complete(token, response)` и `release(token)` принимают owner-token. Отдельного `Cache::lock` в middleware нет.
 - **Гости:** scope `guest:{ip}` (IP через TrustProxies). В README предупредить про NAT/общий IP; рекомендовать `required` только для аутентифицированных маршрутов.
-- **`store_status_codes`** — список диапазонов: `[[200, 299], [400, 499]]`.
+- **`store_status_codes`** — список диапазонов: `[[200, 499]]` (3xx сохраняются: повтор POST с redirect не должен выполняться снова; изменено на ревью v0.1.0).
 - **Маршрут в scope** — метод + шаблон URI (`payments/{id}`); конкретный путь входит в fingerprint.
 - **Другое тело, пока первый запрос выполняется → 422** (fingerprint сохраняется в `begin()`).
 - **Stream- и file-ответы** не сохраняются, lock снимается.
@@ -44,7 +44,7 @@ Fingerprint, lock, DB-хранилище и события — **не** отли
 6. **Конкурентность:** хранилище атомарно захватывает ключ в `begin()` (cache: atomic add; database: уникальная вставка).
    Второй запрос с тем же ключом, пока первый выполняется → **409** (`idempotency_request_in_progress`) + заголовок `Retry-After`.
 7. **Сохранение ответа:** статус, тело, заголовки из белого списка (`Content-Type`, `Location`), TTL (по умолчанию 24 ч).
-   - 2xx и 4xx — сохраняются (настраивается)
+   - 2xx, 3xx и 4xx — сохраняются (настраивается)
    - 5xx — НЕ сохраняются, lock снимается, клиент может повторить
 8. **Повтор:** отдаётся сохранённый ответ + заголовок `Idempotent-Replayed: true`. Контроллер не вызывается.
 9. Исключение в контроллере → lock снимается, ничего не сохраняется.
@@ -65,7 +65,7 @@ return [
     'store' => 'cache',            // cache | database
     'cache_store' => null,         // null = default
     'replay_header' => 'Idempotent-Replayed',
-    'store_status_codes' => [[200, 299], [400, 499]],
+    'store_status_codes' => [[200, 499]],
     'replay_headers' => ['Content-Type', 'Location'],
     'scope_resolver' => \Azhimov\Idempotency\Scope\UserScopeResolver::class,
     'max_key_length' => 255,

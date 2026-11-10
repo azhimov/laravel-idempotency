@@ -61,11 +61,11 @@ return [
 
     /*
     | Inclusive status code ranges whose responses are stored and replayed.
-    | 5xx is intentionally excluded: the client must be able to retry.
+    | 3xx is included: a retried POST that answered with a redirect must not
+    | run again. 5xx is never stored (rejected here): the client must be able to retry.
     */
     'store_status_codes' => [
-        [200, 299],
-        [400, 499],
+        [200, 499],
     ],
 
     /*

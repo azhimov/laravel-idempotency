@@ -67,15 +67,33 @@ it('releases the key when an exception escapes the pipeline', function (): void 
     sendPayment('/payments')->assertCreated();
 });
 
-it('does not store a status outside the configured ranges', function (): void {
+it('stores a 303 redirect and replays it', function (): void {
     Route::post('/payments', function () {
         Counter::$calls++;
 
-        return redirect('/payments/pay_1');
+        return redirect('/payments/pay_1', 303);
     })->middleware('idempotent');
 
-    sendPayment('/payments')->assertRedirect();
-    sendPayment('/payments')->assertRedirect()->assertHeaderMissing('Idempotent-Replayed');
+    sendPayment('/payments')->assertStatus(303)->assertHeader('Location', 'http://localhost/payments/pay_1');
+    sendPayment('/payments')
+        ->assertStatus(303)
+        ->assertHeader('Location', 'http://localhost/payments/pay_1')
+        ->assertHeader('Idempotent-Replayed', 'true');
+
+    expect(Counter::$calls)->toBe(1);
+});
+
+it('does not store a status outside the configured ranges', function (): void {
+    config(['idempotency.store_status_codes' => [[200, 299]]]);
+
+    Route::post('/payments', function () {
+        Counter::$calls++;
+
+        return redirect('/payments/pay_1', 303);
+    })->middleware('idempotent');
+
+    sendPayment('/payments')->assertStatus(303);
+    sendPayment('/payments')->assertStatus(303)->assertHeaderMissing('Idempotent-Replayed');
 
     expect(Counter::$calls)->toBe(2);
 });

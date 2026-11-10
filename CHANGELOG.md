@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 - `idempotent` middleware (`EnsureIdempotency`) with route options `required`, `optional`, `ttl=<seconds>`.
-- Replay of stored responses (status, body, whitelisted headers) with `Idempotent-Replayed: true`.
+- Replay of stored responses (status, body, whitelisted headers) with `Idempotent-Replayed: true`; 2xx, 3xx and 4xx are stored by default, 5xx never.
 - Key scoping by owner + HTTP method + route template; `UserScopeResolver` (user model + id, guests by IP) and the `ScopeResolver` contract.
 - Request `Fingerprint` (method, path, sorted query, normalized JSON/form body, uploaded file hashes); 422 `idempotency_key_reused` on mismatch.
 - 409 `idempotency_request_in_progress` with `Retry-After` for concurrent retries.

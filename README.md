@@ -114,10 +114,10 @@ What gets stored and replayed:
 
 | Handler outcome | Stored? | What a retry does |
 |---|---|---|
-| 2xx, 4xx | yes, for `ttl` | gets the stored response |
+| 2xx, 3xx, 4xx | yes, for `ttl` | gets the stored response (a `303` redirect is replayed as `303`) |
 | **5xx** | no, the key is released | executes again |
 | Exception | no, the key is released | executes again |
-| 3xx, streamed or file response | no, the key is released | executes again |
+| Streamed or file response | no, the key is released | executes again |
 
 ## Configuration
 
@@ -134,7 +134,7 @@ What gets stored and replayed:
 | `cache_store` | `null` | Cache store for `cache` (must support atomic locks); `null` = default |
 | `database.connection` / `.table` | `null` / `idempotency_keys` | For the `database` store |
 | `replay_header` | `Idempotent-Replayed` | Header added to replays |
-| `store_status_codes` | `[[200, 299], [400, 499]]` | Inclusive ranges that are stored; ranges ≥ 500 are rejected |
+| `store_status_codes` | `[[200, 499]]` | Inclusive ranges that are stored (2xx, 3xx, 4xx); ranges ≥ 500 are rejected |
 | `replay_headers` | `['Content-Type', 'Location']` | Response headers stored and replayed (never `Set-Cookie` unless you add it) |
 | `scope_resolver` | `UserScopeResolver` | Who owns a key |
 | `error_responder` | `JsonErrorResponder` | Renders 400/409/422 |
@@ -336,7 +336,6 @@ Checked on Packagist on 2026-11-11. All of these are solid; pick by what you nee
 ## Caveats
 
 - **`lock_timeout` must be longer than your slowest handler.** Otherwise a retry can take the key over while the first request is still running (you'll see `IdempotencyLockLost`).
-- **Redirects (3xx) are not stored** by default, so a retried form `POST` that answered with a redirect runs again. Add `[300, 399]` to `store_status_codes` if your endpoints redirect after the operation.
 - **Guests are scoped by IP.** Clients behind one NAT share it; prefer `idempotent:required` on authenticated routes. Make sure `TrustProxies` is configured so `$request->ip()` is the real client.
 - **Streamed and file responses** can't be captured; the key is released and a retry runs again.
 - **The cache store can lose keys** under memory pressure. Use the database store for money.
