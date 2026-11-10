@@ -6,7 +6,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 `Idempotency-Key` middleware for Laravel: a retried `POST` / `PATCH` is executed **once**, and every retry gets the original response back.
-Built for money flows: a durable database store, request fingerprinting, real concurrency control and fencing when a lock expires.
+Designed with payment APIs in mind: request fingerprinting, real concurrency control, fencing when a lock expires and an optional database store that does not depend on Redis.
+It makes duplicate execution much less likely; it does **not** make it impossible — see [Limitations](#limitations).
 
 ## The problem
 
@@ -147,8 +148,9 @@ What gets stored and replayed:
 | Needs | cache store with atomic locks (Redis recommended) | a table (migration included) |
 | Speed | fastest | one indexed row per request |
 | Survives cache eviction / Redis restart | **no** — an evicted key means a retry runs again | **yes** |
+| Exactly-once execution | no (see [Limitations](#limitations)) | no (see [Limitations](#limitations)) |
 | Cleanup | automatic (cache TTL) | `php artisan idempotency:purge` |
-| Use for | general APIs | **payments, payouts, anything with money** |
+| Use for | general APIs | operations where a lost key is unacceptable (payments, payouts) |
 
 ```bash
 php artisan vendor:publish --tag=idempotency-migrations
@@ -162,6 +164,30 @@ php artisan migrate
 // routes/console.php
 Schedule::command('idempotency:purge')->hourly();
 ```
+
+#### Use a separate database connection
+
+Point the store at its **own connection** (same database, separate PDO):
+
+```php
+// config/database.php — a copy of your main connection under a new name
+'connections' => [
+    'idempotency' => [
+        'driver' => 'pgsql',
+        'host' => env('DB_HOST', '127.0.0.1'),
+        'port' => env('DB_PORT', '5432'),
+        'database' => env('DB_DATABASE', 'laravel'),
+        'username' => env('DB_USERNAME', 'root'),
+        'password' => env('DB_PASSWORD', ''),
+        // ... same options as your main connection
+    ],
+],
+
+// config/idempotency.php
+'database' => ['connection' => 'idempotency', 'table' => 'idempotency_keys'],
+```
+
+Why: if the store shares the connection your application uses and a transaction is open on it while the middleware runs (a `DB::transaction()` around the request, a package that wraps requests in transactions, `RefreshDatabase` in tests), the claim and the stored response become part of *your* transaction. Other requests don't see the claim until commit (or block on the uncommitted row), and a rollback silently erases it. On a separate connection every claim and completion is committed immediately and is visible to all workers.
 
 ### Scoping keys (users, API clients, tenants)
 
@@ -308,11 +334,11 @@ sequenceDiagram
 
 - **The store owns the lock.** No separate `Cache::lock` held around your controller: claiming the key *is* the lock. This lets the database store work without Redis at all.
 - **Owner tokens (fencing).** Every claim gets a fresh token; `complete()` is compare-and-set on it. A request whose lock expired can't overwrite the result of the request that took over — and you get `IdempotencyLockLost` instead of silent corruption.
-- **Database store for money.** Records are rows: a cache eviction or Redis restart can't make a payment retry run twice. The claim is a primary-key `insertOrIgnore` (no exception, so it never aborts a surrounding PostgreSQL transaction); takeover, complete and release are single conditional `UPDATE`/`DELETE` statements.
+- **Durable keys in the database store.** Records are rows, so a cache eviction or a Redis restart can't erase a key and let a retry through. That closes one source of duplicates, not all of them (see [Limitations](#limitations)). The claim is a primary-key `insertOrIgnore` (no exception, so it never aborts a surrounding PostgreSQL transaction); takeover, complete and release are single conditional `UPDATE`/`DELETE` statements.
 - **Cache store is atomic too.** Every state transition runs as read-modify-write under a short per-key cache lock, not just the first `add`.
 - **Strict fingerprint.** JSON key order, whitespace and form/query parameter order are ignored; values, value types (`1500` vs `"1500"`), list order and uploaded file contents are not. A false 422 is better than replaying a response for a different payment.
 - **Safe defaults.** 5xx is never stored (and can't be configured to be); guests are scoped by IP, never share one namespace; only whitelisted headers are replayed (no `Set-Cookie` leaks between retries).
-- **Fail open on storage errors, never on execution.** If storing the response fails *after* the operation ran, the client still gets the real response (the error is reported); the claim stays until `lock_timeout`, so retries get 409 rather than a second execution.
+- **A storage error never hides the real result.** If storing the response fails *after* the operation ran, the client still gets the real response (the error is reported); the claim stays until `lock_timeout`, so retries get 409 instead of running immediately — but after `lock_timeout` a retry takes the key over and runs again (see [Limitations](#limitations)).
 
 ## Comparison with alternatives
 
@@ -333,12 +359,18 @@ Checked on Packagist on 2026-11-11. All of these are solid; pick by what you nee
 
 ¹ Not described in the package's README at the time of writing — it may exist; corrections welcome.
 
-## Caveats
+## Limitations
 
+- **The window between your business change and `complete()`.** The response is stored *after* your controller returns. If the process dies in between (OOM kill, deploy, server crash), or the store is unavailable at that moment, the operation has happened but its result is not recorded. The key stays claimed until `lock_timeout` (retries get 409), then a retry takes it over and **runs the handler again**. Neither store closes this window in v0.1: the business change and the idempotency record are written in separate transactions. Until [v0.2](#roadmap), mitigate it at the domain level — a unique constraint on a business key (e.g. `payments.client_reference`) so a second execution fails instead of charging twice — keep handlers short, and alert on `IdempotencyLockLost` and on errors reported from the middleware.
 - **`lock_timeout` must be longer than your slowest handler.** Otherwise a retry can take the key over while the first request is still running (you'll see `IdempotencyLockLost`).
 - **Guests are scoped by IP.** Clients behind one NAT share it; prefer `idempotent:required` on authenticated routes. Make sure `TrustProxies` is configured so `$request->ip()` is the real client.
 - **Streamed and file responses** can't be captured; the key is released and a retry runs again.
-- **The cache store can lose keys** under memory pressure. Use the database store for money.
+- **The cache store can lose keys** under memory pressure or on a Redis restart; a lost key lets the next retry run again. Prefer the database store where that matters.
+- **The database store shares your transaction** if it uses your application's connection — use a [separate connection](#use-a-separate-database-connection).
+
+## Roadmap
+
+- **v0.2 — `DatabaseStore::completeInTransaction()`**: an opt-in way to store the response in the *same* database transaction as the business change (the store and your models on one connection), so the result is committed atomically with the operation. This closes the window described in [Limitations](#limitations) for database-backed operations.
 
 ## Testing
 

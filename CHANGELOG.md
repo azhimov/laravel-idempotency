@@ -20,5 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Events: `IdempotentRequestStarted`, `IdempotentResponseStored`, `IdempotentResponseReplayed`, `IdempotencyKeyMismatch`, `IdempotencyConflict`, `IdempotencyLockLost`.
 - Support for PHP 8.2–8.5 and Laravel 11–13.
 
+### Known limitations
+- The response is stored after the handler returns, in a separate transaction from the business change: a crash in between lets a retry run the handler again after `lock_timeout`. Planned for 0.2.0: opt-in `DatabaseStore::completeInTransaction()` to commit the response atomically with the operation.
+
 [Unreleased]: https://github.com/azhimov/laravel-idempotency/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/azhimov/laravel-idempotency/releases/tag/v0.1.0

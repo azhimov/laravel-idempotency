@@ -36,7 +36,8 @@ return [
     /*
     | Storage backend: 'cache', 'database' or a class implementing
     | Azhimov\Idempotency\Contracts\IdempotencyStore.
-    | Use 'database' for money: cache entries can be evicted under memory pressure.
+    | Prefer 'database' where a lost key is unacceptable: cache entries can be
+    | evicted under memory pressure. Give it its own connection (see README).
     */
     'store' => 'cache',
 
