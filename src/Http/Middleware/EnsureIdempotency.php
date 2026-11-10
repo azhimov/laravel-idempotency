@@ -7,6 +7,12 @@ namespace Azhimov\Idempotency\Http\Middleware;
 use Azhimov\Idempotency\Contracts\ErrorResponder;
 use Azhimov\Idempotency\Contracts\IdempotencyStore;
 use Azhimov\Idempotency\Contracts\ScopeResolver;
+use Azhimov\Idempotency\Events\IdempotencyConflict;
+use Azhimov\Idempotency\Events\IdempotencyKeyMismatch;
+use Azhimov\Idempotency\Events\IdempotencyLockLost;
+use Azhimov\Idempotency\Events\IdempotentRequestStarted;
+use Azhimov\Idempotency\Events\IdempotentResponseReplayed;
+use Azhimov\Idempotency\Events\IdempotentResponseStored;
 use Azhimov\Idempotency\Exceptions\InvalidIdempotencyKey;
 use Azhimov\Idempotency\Http\ErrorCode;
 use Azhimov\Idempotency\Stores\Results\Completed;
@@ -18,6 +24,7 @@ use Azhimov\Idempotency\Support\IdempotencyKey;
 use Azhimov\Idempotency\Support\StoredResponse;
 use Closure;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
 use LogicException;
@@ -36,6 +43,7 @@ final class EnsureIdempotency
         private readonly ScopeResolver $scopes,
         private readonly ErrorResponder $errors,
         private readonly Repository $config,
+        private readonly Dispatcher $events,
     ) {}
 
     /**
@@ -69,10 +77,10 @@ final class EnsureIdempotency
         $result = $this->store->begin($recordKey, Fingerprint::fromRequest($request), $settings->lockTimeout);
 
         return match (true) {
-            $result instanceof Started => $this->execute($request, $next, $settings, $recordKey, $result->token),
-            $result instanceof Completed => $this->replay($result->response, $settings),
-            $result instanceof InProgress => $this->inProgress($request, $result),
-            $result instanceof Mismatch => $this->error($request, ErrorCode::KeyReused),
+            $result instanceof Started => $this->execute($request, $next, $settings, $key, $recordKey, $result->token),
+            $result instanceof Completed => $this->replay($request, $key, $result->response, $settings),
+            $result instanceof InProgress => $this->inProgress($request, $key, $result),
+            $result instanceof Mismatch => $this->mismatch($request, $key),
             default => throw new LogicException('Unknown begin result '.$result::class),
         };
     }
@@ -80,8 +88,10 @@ final class EnsureIdempotency
     /**
      * @param  Closure(Request): Response  $next
      */
-    private function execute(Request $request, Closure $next, MiddlewareOptions $settings, string $recordKey, string $token): Response
+    private function execute(Request $request, Closure $next, MiddlewareOptions $settings, IdempotencyKey $key, string $recordKey, string $token): Response
     {
+        $this->events->dispatch(new IdempotentRequestStarted($request, $key->value));
+
         try {
             $response = $next($request);
         } catch (Throwable $e) {
@@ -98,12 +108,16 @@ final class EnsureIdempotency
         }
 
         try {
-            $this->store->complete(
+            $stored = $this->store->complete(
                 $recordKey,
                 $token,
                 StoredResponse::fromResponse($response, $settings->replayHeaders),
                 $settings->ttl,
             );
+
+            $this->events->dispatch($stored
+                ? new IdempotentResponseStored($request, $key->value, $response->getStatusCode())
+                : new IdempotencyLockLost($request, $key->value, $response->getStatusCode()));
         } catch (Throwable $e) {
             // The operation already happened: the client must get its real
             // result. The claim stays until lock_timeout, so retries see 409
@@ -124,8 +138,17 @@ final class EnsureIdempotency
         }
     }
 
-    private function inProgress(Request $request, InProgress $result): Response
+    private function mismatch(Request $request, IdempotencyKey $key): Response
     {
+        $this->events->dispatch(new IdempotencyKeyMismatch($request, $key->value));
+
+        return $this->error($request, ErrorCode::KeyReused);
+    }
+
+    private function inProgress(Request $request, IdempotencyKey $key, InProgress $result): Response
+    {
+        $this->events->dispatch(new IdempotencyConflict($request, $key->value, $result->retryAfter));
+
         $response = $this->error($request, ErrorCode::RequestInProgress);
         $response->headers->set('Retry-After', (string) $result->retryAfter);
 
@@ -137,10 +160,12 @@ final class EnsureIdempotency
         return $this->errors->respond($request, $code, $message ?? $code->message());
     }
 
-    private function replay(StoredResponse $stored, MiddlewareOptions $settings): Response
+    private function replay(Request $request, IdempotencyKey $key, StoredResponse $stored, MiddlewareOptions $settings): Response
     {
         $response = $stored->toResponse();
         $response->headers->set($settings->replayHeader, 'true');
+
+        $this->events->dispatch(new IdempotentResponseReplayed($request, $key->value, $stored->status));
 
         return $response;
     }
