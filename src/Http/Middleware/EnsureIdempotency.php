@@ -85,25 +85,43 @@ final class EnsureIdempotency
         try {
             $response = $next($request);
         } catch (Throwable $e) {
-            $this->store->release($recordKey, $token);
+            $this->releaseQuietly($recordKey, $token);
 
             throw $e;
         }
 
         if (! StoredResponse::canCapture($response) || ! $settings->shouldStore($response->getStatusCode())) {
-            $this->store->release($recordKey, $token);
+            // 5xx, redirects, streams: nothing to replay, the client may retry.
+            $this->releaseQuietly($recordKey, $token);
 
             return $response;
         }
 
-        $this->store->complete(
-            $recordKey,
-            $token,
-            StoredResponse::fromResponse($response, $settings->replayHeaders),
-            $settings->ttl,
-        );
+        try {
+            $this->store->complete(
+                $recordKey,
+                $token,
+                StoredResponse::fromResponse($response, $settings->replayHeaders),
+                $settings->ttl,
+            );
+        } catch (Throwable $e) {
+            // The operation already happened: the client must get its real
+            // result. The claim stays until lock_timeout, so retries see 409
+            // instead of executing again.
+            report($e);
+        }
 
         return $response;
+    }
+
+    private function releaseQuietly(string $recordKey, string $token): void
+    {
+        try {
+            $this->store->release($recordKey, $token);
+        } catch (Throwable $e) {
+            // Never mask the original outcome; the claim expires after lock_timeout.
+            report($e);
+        }
     }
 
     private function inProgress(Request $request, InProgress $result): Response
