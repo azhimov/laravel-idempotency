@@ -1,0 +1,67 @@
+{
+    "name": "azhimov/laravel-idempotency",
+    "description": "Idempotency-Key middleware for Laravel: safe retries for POST/PATCH APIs with request fingerprinting, concurrency locks and cache or database storage.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "idempotency",
+        "idempotency-key",
+        "middleware",
+        "api",
+        "payments"
+    ],
+    "authors": [
+        {
+            "name": "Zhanibek Azhimov",
+            "homepage": "https://github.com/azhimov"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/contracts": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/support": "^11.0 || ^12.0 || ^13.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
+        "pestphp/pest": "^3.8 || ^4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Azhimov\\Idempotency\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Azhimov\\Idempotency\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "format": "pint",
+        "format:check": "pint --test",
+        "check": [
+            "@format:check",
+            "@analyse",
+            "@test"
+        ]
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Azhimov\\Idempotency\\IdempotencyServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
