@@ -34,7 +34,9 @@ return [
     'lock_timeout' => 30,
 
     /*
-    | Storage backend: 'cache' or 'database'.
+    | Storage backend: 'cache', 'database' or a class implementing
+    | Azhimov\Idempotency\Contracts\IdempotencyStore.
+    | Use 'database' for money: cache entries can be evicted under memory pressure.
     */
     'store' => 'cache',
 
@@ -42,6 +44,15 @@ return [
     | Cache store name for the 'cache' backend (must support atomic locks). null = default.
     */
     'cache_store' => null,
+
+    /*
+    | Connection (null = default) and table for the 'database' backend.
+    | Publish the migration: php artisan vendor:publish --tag=idempotency-migrations
+    */
+    'database' => [
+        'connection' => null,
+        'table' => 'idempotency_keys',
+    ],
 
     /*
     | Header added to replayed responses.

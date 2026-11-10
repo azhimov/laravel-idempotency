@@ -22,6 +22,13 @@ use LogicException;
 final readonly class Record
 {
     /**
+     * A processing record is kept this many seconds past its logical lock
+     * (locked_until), so a request that finishes late can still store its
+     * response when nobody has taken the key over.
+     */
+    public const LATE_COMPLETION_GRACE = 3600;
+
+    /**
      * @param  int  $lockedUntil  unix time the processing claim expires
      * @param  int  $expiresAt  unix time the completed response expires (0 while processing)
      */
@@ -56,6 +63,16 @@ final readonly class Record
         return $this->status === RecordStatus::Processing
             ? $this->lockedUntil <= $now
             : $this->expiresAt <= $now;
+    }
+
+    /**
+     * When the record is garbage and may be physically deleted.
+     */
+    public function purgeAfter(): int
+    {
+        return $this->status === RecordStatus::Processing
+            ? $this->lockedUntil + self::LATE_COMPLETION_GRACE
+            : $this->expiresAt;
     }
 
     public function isOwnedBy(string $token): bool

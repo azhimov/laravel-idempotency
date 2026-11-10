@@ -28,13 +28,6 @@ use InvalidArgumentException;
  */
 final class CacheStore implements IdempotencyStore
 {
-    /**
-     * A processing entry outlives its logical lock (locked_until) by this many
-     * seconds, so a request that finishes late can still store its response
-     * when nobody has taken the key over.
-     */
-    private const LATE_COMPLETION_GRACE = 3600;
-
     private readonly LockProvider $locks;
 
     public function __construct(
@@ -64,7 +57,7 @@ final class CacheStore implements IdempotencyStore
                 }
 
                 $record = Record::processing($fingerprint, $now + $lockTimeout);
-                $this->cache->put($this->prefix.$key, $record->toArray(), $lockTimeout + self::LATE_COMPLETION_GRACE);
+                $this->cache->put($this->prefix.$key, $record->toArray(), $lockTimeout + Record::LATE_COMPLETION_GRACE);
 
                 return new Started($record->token);
             });

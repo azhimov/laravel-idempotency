@@ -1,0 +1,46 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::connection($this->connectionName())->create($this->tableName(), function (Blueprint $table): void {
+            $table->string('key_hash', 64)->primary();
+            $table->char('fingerprint', 64);
+            $table->string('owner_token', 64);
+            $table->string('status', 16);
+            // Unix timestamps: independent of DB/app time zones.
+            $table->unsignedBigInteger('locked_until');
+            $table->unsignedBigInteger('expires_at');
+            $table->unsignedBigInteger('purge_after')->index();
+            $table->longText('response')->nullable();
+            $table->unsignedBigInteger('created_at');
+            $table->unsignedBigInteger('updated_at');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::connection($this->connectionName())->dropIfExists($this->tableName());
+    }
+
+    private function connectionName(): ?string
+    {
+        $connection = config('idempotency.database.connection');
+
+        return is_string($connection) ? $connection : null;
+    }
+
+    private function tableName(): string
+    {
+        $table = config('idempotency.database.table');
+
+        return is_string($table) ? $table : 'idempotency_keys';
+    }
+};

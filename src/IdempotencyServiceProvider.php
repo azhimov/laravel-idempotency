@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Azhimov\Idempotency;
 
+use Azhimov\Idempotency\Console\PurgeCommand;
 use Azhimov\Idempotency\Contracts\ErrorResponder;
 use Azhimov\Idempotency\Contracts\IdempotencyStore;
 use Azhimov\Idempotency\Contracts\ScopeResolver;
 use Azhimov\Idempotency\Http\Middleware\EnsureIdempotency;
 use Azhimov\Idempotency\Stores\CacheStore;
+use Azhimov\Idempotency\Stores\DatabaseStore;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
@@ -39,6 +41,14 @@ final class IdempotencyServiceProvider extends ServiceProvider
             $this->publishes([
                 self::configPath() => config_path('idempotency.php'),
             ], 'idempotency-config');
+
+            $this->publishes([
+                __DIR__.'/../database/migrations/create_idempotency_keys_table.php.stub' => database_path(
+                    'migrations/'.date('Y_m_d_His').'_create_idempotency_keys_table.php',
+                ),
+            ], 'idempotency-migrations');
+
+            $this->commands([PurgeCommand::class]);
         }
     }
 
@@ -51,6 +61,16 @@ final class IdempotencyServiceProvider extends ServiceProvider
             $cacheStore = $config->get('idempotency.cache_store');
 
             return new CacheStore($app->make('cache')->store(is_string($cacheStore) ? $cacheStore : null));
+        }
+
+        if ($store === 'database') {
+            $connection = $config->get('idempotency.database.connection');
+            $table = $config->get('idempotency.database.table');
+
+            return new DatabaseStore(
+                $app->make('db')->connection(is_string($connection) ? $connection : null),
+                is_string($table) && $table !== '' ? $table : 'idempotency_keys',
+            );
         }
 
         return self::makeConfigured($app, 'idempotency.store', IdempotencyStore::class);
