@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use Azhimov\Idempotency\Scope\UserScopeResolver;
 
 return [
 
@@ -58,6 +59,12 @@ return [
     | Response headers persisted and sent back on replay.
     */
     'replay_headers' => ['Content-Type', 'Location'],
+
+    /*
+    | Resolves who "owns" a key (user, API client, tenant...).
+    | Must implement Azhimov\Idempotency\Contracts\ScopeResolver.
+    */
+    'scope_resolver' => UserScopeResolver::class,
 
     'max_key_length' => 255,
 
