@@ -31,6 +31,9 @@ function storeContract(Closure $makeStore): void
     };
 
     describe('store contract', function () use ($makeStore, $fp, $response, $start): void {
+        // Exact second arithmetic below must not straddle a real clock tick.
+        beforeEach(fn () => $this->freezeTime());
+
         it('lets the first request start', function () use ($makeStore, $start): void {
             $start($makeStore());
         });

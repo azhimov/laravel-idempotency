@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Azhimov\Idempotency;
 
+use Azhimov\Idempotency\Contracts\ErrorResponder;
 use Azhimov\Idempotency\Contracts\IdempotencyStore;
 use Azhimov\Idempotency\Contracts\ScopeResolver;
 use Azhimov\Idempotency\Http\Middleware\EnsureIdempotency;
@@ -21,6 +22,10 @@ final class IdempotencyServiceProvider extends ServiceProvider
 
         $this->app->bind(ScopeResolver::class, fn (Application $app): ScopeResolver => self::makeConfigured(
             $app, 'idempotency.scope_resolver', ScopeResolver::class,
+        ));
+
+        $this->app->bind(ErrorResponder::class, fn (Application $app): ErrorResponder => self::makeConfigured(
+            $app, 'idempotency.error_responder', ErrorResponder::class,
         ));
 
         $this->app->bind(IdempotencyStore::class, fn (Application $app): IdempotencyStore => self::makeStore($app));

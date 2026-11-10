@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 
 beforeEach(function (): void {
-    Counter::$calls = 0;
+    Counter::reset();
+    $this->freezeTime();
 
     $handler = function (Request $request) {
         $id = 'pay_'.++Counter::$calls;

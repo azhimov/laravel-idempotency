@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Azhimov\Idempotency\Http\Middleware;
 
+use Azhimov\Idempotency\Contracts\ErrorResponder;
 use Azhimov\Idempotency\Contracts\IdempotencyStore;
 use Azhimov\Idempotency\Contracts\ScopeResolver;
 use Azhimov\Idempotency\Exceptions\InvalidIdempotencyKey;
+use Azhimov\Idempotency\Http\ErrorCode;
 use Azhimov\Idempotency\Stores\Results\Completed;
 use Azhimov\Idempotency\Stores\Results\InProgress;
 use Azhimov\Idempotency\Stores\Results\Mismatch;
@@ -32,6 +34,7 @@ final class EnsureIdempotency
     public function __construct(
         private readonly IdempotencyStore $store,
         private readonly ScopeResolver $scopes,
+        private readonly ErrorResponder $errors,
         private readonly Repository $config,
     ) {}
 
@@ -50,7 +53,7 @@ final class EnsureIdempotency
 
         if ($rawKey === null) {
             if ($settings->required) {
-                abort(400, 'The Idempotency-Key header is required.');
+                return $this->error($request, ErrorCode::KeyMissing);
             }
 
             return $next($request);
@@ -59,7 +62,7 @@ final class EnsureIdempotency
         try {
             $key = IdempotencyKey::fromString($rawKey, $settings->maxKeyLength);
         } catch (InvalidIdempotencyKey $e) {
-            abort(400, $e->getMessage());
+            return $this->error($request, ErrorCode::KeyInvalid, ErrorCode::KeyInvalid->message().' '.$e->getMessage());
         }
 
         $recordKey = $this->recordKey($request, $key);
@@ -68,8 +71,8 @@ final class EnsureIdempotency
         return match (true) {
             $result instanceof Started => $this->execute($request, $next, $settings, $recordKey, $result->token),
             $result instanceof Completed => $this->replay($result->response, $settings),
-            $result instanceof InProgress => abort(409, 'A request with this idempotency key is in progress.'),
-            $result instanceof Mismatch => abort(422, 'This idempotency key was used with a different request.'),
+            $result instanceof InProgress => $this->inProgress($request, $result),
+            $result instanceof Mismatch => $this->error($request, ErrorCode::KeyReused),
             default => throw new LogicException('Unknown begin result '.$result::class),
         };
     }
@@ -101,6 +104,19 @@ final class EnsureIdempotency
         );
 
         return $response;
+    }
+
+    private function inProgress(Request $request, InProgress $result): Response
+    {
+        $response = $this->error($request, ErrorCode::RequestInProgress);
+        $response->headers->set('Retry-After', (string) $result->retryAfter);
+
+        return $response;
+    }
+
+    private function error(Request $request, ErrorCode $code, ?string $message = null): Response
+    {
+        return $this->errors->respond($request, $code, $message ?? $code->message());
     }
 
     private function replay(StoredResponse $stored, MiddlewareOptions $settings): Response

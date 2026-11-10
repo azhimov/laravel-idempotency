@@ -1,6 +1,8 @@
 <?php
 
 declare(strict_types=1);
+
+use Azhimov\Idempotency\Http\Responders\JsonErrorResponder;
 use Azhimov\Idempotency\Scope\UserScopeResolver;
 
 return [
@@ -65,6 +67,12 @@ return [
     | Must implement Azhimov\Idempotency\Contracts\ScopeResolver.
     */
     'scope_resolver' => UserScopeResolver::class,
+
+    /*
+    | Renders 400/409/422 errors. Must implement Azhimov\Idempotency\Contracts\ErrorResponder.
+    | Default body: {"error": {"code": "...", "message": "..."}}
+    */
+    'error_responder' => JsonErrorResponder::class,
 
     'max_key_length' => 255,
 
