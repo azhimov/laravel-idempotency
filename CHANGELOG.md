@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `CacheStore` (any cache store with atomic locks) and `DatabaseStore` (publishable migration, `idempotency:purge` command).
 - Shared store contract test suite for custom stores.
 - Events: `IdempotentRequestStarted`, `IdempotentResponseStored`, `IdempotentResponseReplayed`, `IdempotencyKeyMismatch`, `IdempotencyConflict`, `IdempotencyLockLost`.
+- `IDEMPOTENCY_STORE`, `IDEMPOTENCY_TTL` and `IDEMPOTENCY_REQUIRED` env variables, parsed strictly.
 - Support for PHP 8.2–8.5 and Laravel 11–13.
 
 ### Known limitations

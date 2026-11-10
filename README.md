@@ -122,16 +122,16 @@ What gets stored and replayed:
 
 ## Configuration
 
-`config/idempotency.php` (defaults):
+`config/idempotency.php` (defaults). `store`, `ttl` and `required` can also be set from `.env`; malformed values fail loudly instead of falling back:
 
 | Key | Default | Meaning |
 |---|---|---|
 | `header` | `Idempotency-Key` | Request header with the key |
 | `methods` | `['POST', 'PATCH']` | Protected methods; others pass through |
-| `required` | `false` | Reject requests without a key (per route: `idempotent:required`) |
-| `ttl` | `86400` | Seconds a response is replayed (per route: `idempotent:ttl=N`) |
+| `required` | `false` | Reject requests without a key (per route: `idempotent:required`). Env: `IDEMPOTENCY_REQUIRED` |
+| `ttl` | `86400` | Seconds a response is replayed (per route: `idempotent:ttl=N`). Env: `IDEMPOTENCY_TTL` |
 | `lock_timeout` | `30` | Seconds a running request holds the key. **Must exceed your slowest handler** |
-| `store` | `cache` | `cache`, `database` or a class implementing `IdempotencyStore` |
+| `store` | `cache` | `cache`, `database` or a class implementing `IdempotencyStore`. Env: `IDEMPOTENCY_STORE` |
 | `cache_store` | `null` | Cache store for `cache` (must support atomic locks); `null` = default |
 | `database.connection` / `.table` | `null` / `idempotency_keys` | For the `database` store |
 | `replay_header` | `Idempotent-Replayed` | Header added to replays |

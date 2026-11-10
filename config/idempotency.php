@@ -5,6 +5,9 @@ declare(strict_types=1);
 use Azhimov\Idempotency\Http\Responders\JsonErrorResponder;
 use Azhimov\Idempotency\Scope\UserScopeResolver;
 
+// Env values are parsed strictly: a malformed IDEMPOTENCY_TTL or
+// IDEMPOTENCY_REQUIRED becomes false/null and the middleware refuses to run
+// with a clear config error instead of silently guessing.
 return [
 
     /*
@@ -21,12 +24,12 @@ return [
     | When true, a protected request without a key is rejected with 400.
     | Can be overridden per route: ->middleware('idempotent:required').
     */
-    'required' => false,
+    'required' => filter_var(env('IDEMPOTENCY_REQUIRED', false), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE),
 
     /*
     | How long (seconds) a stored response is replayed. Per route: 'idempotent:ttl=3600'.
     */
-    'ttl' => 86400,
+    'ttl' => filter_var(env('IDEMPOTENCY_TTL', 86400), FILTER_VALIDATE_INT),
 
     /*
     | Max time (seconds) a request may hold the lock. Must exceed your slowest handler.
@@ -39,7 +42,7 @@ return [
     | Prefer 'database' where a lost key is unacceptable: cache entries can be
     | evicted under memory pressure. Give it its own connection (see README).
     */
-    'store' => 'cache',
+    'store' => env('IDEMPOTENCY_STORE', 'cache'),
 
     /*
     | Cache store name for the 'cache' backend (must support atomic locks). null = default.

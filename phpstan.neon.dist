@@ -6,3 +6,6 @@ parameters:
     paths:
         - src
         - config
+    # The package's own config dir, so env() is allowed there and nowhere else.
+    configDirectories:
+        - config
