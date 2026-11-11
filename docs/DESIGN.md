@@ -23,7 +23,7 @@ Fingerprint, lock, DB-хранилище и события — **не** отли
 1. **Надёжное DB-хранилище для денежных операций.** Запись — конечный автомат `processing → completed`, lock = уникальная вставка строки. Не зависит от Redis, ключ не пропадёт при eviction.
 2. **Защита при истечении lock.** У записи есть owner-token; ответ сохраняется только если lock всё ещё наш (compare-and-set). Дубль, забравший истёкший lock, не перезапишет результат.
 3. **Безопасные умолчания:** 5xx не сохраняются, гости не делят одно пространство ключей.
-4. **Laravel 11–13**, связка с laravel-outbox и payments-outbox.
+4. **Laravel 12–13**, связка с laravel-outbox и payments-outbox.
 
 ## Решения v0.1
 - **Lock держит хранилище.** `begin(scope, key, fingerprint): Started | InProgress | Completed | Mismatch`; `complete(token, response)` и `release(token)` принимают owner-token. Отдельного `Cache::lock` в middleware нет.
@@ -32,13 +32,14 @@ Fingerprint, lock, DB-хранилище и события — **не** отли
 - **Маршрут в scope** — метод + шаблон URI (`payments/{id}`); конкретный путь входит в fingerprint.
 - **Другое тело, пока первый запрос выполняется → 422** (fingerprint сохраняется в `begin()`).
 - **Stream- и file-ответы** не сохраняются, lock снимается.
-- **CI:** PHP 8.2–8.5 × Laravel 11–13 + prefer-lowest; PHP 8.2 × Laravel 13 исключён.
+- **CI:** PHP 8.2–8.5 × Laravel 12–13 + prefer-lowest; PHP 8.2 × Laravel 13 исключён.
 
 ## Решения на ревью v0.1.0
 - `store_status_codes` по умолчанию `[[200, 499]]`: 3xx сохраняются, повтор POST → 303 отдаёт тот же 303.
 - Env: `IDEMPOTENCY_STORE`, `IDEMPOTENCY_TTL`, `IDEMPOTENCY_REQUIRED` (строгий парсинг, мусор → ошибка конфига).
 - Ограничение v0.1 зафиксировано в README: окно «бизнес-изменение выполнено, `complete()` не успел». Для `DatabaseStore` рекомендуется отдельное подключение.
 - v0.2: opt-in `DatabaseStore::completeInTransaction()` — ответ коммитится в той же транзакции, что и бизнес-изменение.
+- Laravel 11 убран из поддержки: после окончания security-поддержки у всех релизов 11.x есть открытые advisories, Composer их не ставит. Поддерживаются Laravel 12–13.
 
 ## Поведение
 1. Middleware `idempotent` (алиас) / `Azhimov\Idempotency\Http\Middleware\EnsureIdempotency`.
@@ -118,7 +119,7 @@ tests/ (Pest + Orchestra Testbench)
 - истечение TTL, команда purge
 
 ## CI
-GitHub Actions: матрица PHP 8.2–8.5 × Laravel 11–13 (+ prefer-lowest, без PHP 8.2 × Laravel 13), Pest, Larastan, Pint.
+GitHub Actions: матрица PHP 8.2–8.5 × Laravel 12–13 (+ prefer-lowest, без PHP 8.2 × Laravel 13), Pest, Larastan, Pint.
 
 ## Definition of Done v0.1.0
 Чеклист готовности репозитория + пример в README: обычный `POST /payments` и повтор с `curl`, диаграмма последовательности (Mermaid) для первого запроса, повтора и конфликта.

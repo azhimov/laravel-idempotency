@@ -19,7 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Shared store contract test suite for custom stores.
 - Events: `IdempotentRequestStarted`, `IdempotentResponseStored`, `IdempotentResponseReplayed`, `IdempotencyKeyMismatch`, `IdempotencyConflict`, `IdempotencyLockLost`.
 - `IDEMPOTENCY_STORE`, `IDEMPOTENCY_TTL` and `IDEMPOTENCY_REQUIRED` env variables, parsed strictly.
-- Support for PHP 8.2–8.5 and Laravel 11–13.
+- Support for PHP 8.2–8.5 and Laravel 12–13.
 
 ### Known limitations
 - The response is stored after the handler returns, in a separate transaction from the business change: a crash in between lets a retry run the handler again after `lock_timeout`. Planned for 0.2.0: opt-in `DatabaseStore::completeInTransaction()` to commit the response atomically with the operation.

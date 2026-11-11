@@ -17,7 +17,7 @@ The standard fix (Stripe, Adyen, the IETF draft [*The Idempotency-Key HTTP Heade
 
 ## Installation
 
-Requires PHP 8.2+ and Laravel 11, 12 or 13.
+Requires PHP 8.2+ and Laravel 12 or 13.
 
 ```bash
 composer require azhimov/laravel-idempotency
@@ -350,7 +350,7 @@ Checked on Packagist on 2026-11-11. All of these are solid; pick by what you nee
 | | **this package** | [square1/laravel-idempotency](https://github.com/square1-io/laravel-idempotency) | [wendelladriel/laravel-idempotency](https://github.com/WendellAdriel/laravel-idempotency) | [infinitypaul/idempotency-laravel](https://github.com/infinitypaul/idempotency-laravel) | [grazulex/laravel-api-idempotency](https://github.com/Grazulex/laravel-api-idempotency) |
 |---|---|---|---|---|---|
 | Downloads | new | ~308k | ~41k | ~40k | ~1k |
-| Laravel | 11–13 | 12–13 | 13 | 9–13 | 12–13 |
+| Laravel | 12–13 | 12–13 | 13 | 9–13 | 12–13 |
 | Lock against concurrent execution | ✅ 409 + `Retry-After` | ✅ 409 | ✅ | ✅ | ✅ wait / reject |
 | Payload fingerprint | ✅ 422 | ✅ 422 | replays same data only¹ | ✅ | ✅ |
 | Database store | ✅ | cache only | cache only | ¹ | ✅ (+ Redis, DynamoDB) |
