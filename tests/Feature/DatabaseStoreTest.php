@@ -16,7 +16,11 @@ use Illuminate\Support\ServiceProvider;
 
 function migrateIdempotencyTable(): void
 {
-    (require __DIR__.'/../../database/migrations/create_idempotency_keys_table.php.stub')->up();
+    $migration = require __DIR__.'/../../database/migrations/create_idempotency_keys_table.php.stub';
+
+    // Real MySQL/PostgreSQL servers keep tables between tests; start clean.
+    $migration->down();
+    $migration->up();
 }
 
 beforeEach(function (): void {
@@ -133,4 +137,16 @@ it('explains that a cache store needs no purging', function (): void {
     $this->artisan('idempotency:purge')
         ->expectsOutputToContain('nothing to purge')
         ->assertSuccessful();
+});
+
+it('does not abort a surrounding transaction on a key conflict', function (): void {
+    DB::transaction(function (): void {
+        $store = dbStore();
+        $store->begin('k1', fp(), 30);
+
+        // On PostgreSQL a failed INSERT would poison the transaction and the
+        // next statement would fail with "current transaction is aborted".
+        expect($store->begin('k1', fp(), 30))->toBeInstanceOf(InProgress::class)
+            ->and(DB::table('idempotency_keys')->count())->toBe(1);
+    });
 });

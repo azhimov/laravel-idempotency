@@ -78,6 +78,81 @@ jobs:
       - name: Run tests
         run: vendor/bin/pest --ci
 
+  database:
+    name: DatabaseStore · ${{ matrix.db }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - db: mysql
+            port: 3306
+            username: root
+          - db: pgsql
+            port: 5432
+            username: postgres
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: secret
+          MYSQL_DATABASE: idempotency
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -psecret"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: idempotency
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_mysql, pdo_pgsql, pdo_sqlite
+          coverage: none
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      # The shared store contract suite plus DatabaseStore-specific tests, on a real server.
+      - name: Run DatabaseStore tests
+        run: vendor/bin/pest --ci tests/Feature/DatabaseStoreTest.php
+        env:
+          IDEMPOTENCY_TEST_DB: ${{ matrix.db }}
+          DB_HOST: 127.0.0.1
+          DB_PORT: ${{ matrix.port }}
+          DB_DATABASE: idempotency
+          DB_USERNAME: ${{ matrix.username }}
+          DB_PASSWORD: secret
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite
+          coverage: pcov
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Run tests with coverage
+        run: vendor/bin/pest --ci --coverage
+
   quality:
     name: Static analysis & code style
     runs-on: ubuntu-latest
