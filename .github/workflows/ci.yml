@@ -127,7 +127,7 @@ jobs:
           DB_PASSWORD: secret
 
   coverage:
-    name: Coverage
+    name: Coverage (min 90%)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -142,7 +142,7 @@ jobs:
         run: composer update --prefer-dist --no-interaction --no-progress
 
       - name: Run tests with coverage
-        run: vendor/bin/pest --ci --coverage
+        run: vendor/bin/pest --ci --coverage --min=90
 
   quality:
     name: Static analysis & code style
